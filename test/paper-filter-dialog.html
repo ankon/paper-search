@@ -71,42 +71,6 @@
 					});
 				});
 
-				suite('selected values behavior', function() {
-					var element;
-
-					setup(function() {
-						element = fixture('TrivialElement');
-					});
-
-					test('pre-selects selected values', function() {
-						// Prepare: user selected filter 'age' with
-						element._selectedFilters.age = [ 'adult' ];
-
-						element._selectedFilter = { id: 'age', values: [ { id: 'adult' } ] };
-
-						// Pre-condition: no filters are selected
-						expect(element.$.valuesList.items[0].selected).to.be.undefined;
-
-						element._preselectFilterValues();
-
-						expect(element.$.valuesList.items[0].selected).to.be.true;
-					});
-					test('copies over selected values after confirming them', function() {
-						// Pre-condition: no filters are selected
-						element._selectedFilters = {};
-
-						// Prepare: user selected value 'adult' in the age filter
-						element._selectedFilter = { id: 'age', values: [
-							{ id: 'adult', selected: true },
-							{ id: 'teenager', selected: true },
-							{ id: 'child' }
-						]};
-
-						element._tapSelectValues();
-						expect(element._selectedFilters.age).to.be.eql([ 'adult', 'teenager' ]);
-					});
-				});
-
 				suite('has-selected-values behavior', function() {
 					var element;
 
@@ -115,13 +79,13 @@
 					});
 
 					test('returns false for no filters', function() {
-						expect(element._hasSelectedFilters({}, 0)).to.be.eql(false);
+						expect(element._computeHasSelectedFilters({})).to.be.eql(false);
 					});
 					test('returns false for filters without values', function() {
-						expect(element._hasSelectedFilters({ age: [] }, 0)).to.be.eql(false);
+						expect(element._computeHasSelectedFilters({ age: [] })).to.be.eql(false);
 					});
 					test('returns true for no filters', function() {
-						expect(element._hasSelectedFilters({ age: [ 'adult' ] }, 0)).to.be.eql(true);
+						expect(element._computeHasSelectedFilters({ age: [ 'adult' ] })).to.be.eql(true);
 					});
 				});
 
@@ -140,22 +104,8 @@
 					test('shows value if selected', function() {
 						expect(element._getSelectedValuesNames(filter, { age: [ 'adult' ] }, 0)).to.be.eql('20+');
 					});
-					test('concts multiple value if selected', function() {
+					test('concatenates multiple value if selected', function() {
 						expect(element._getSelectedValuesNames(filter, { age: [ 'child', 'adult' ] }, 0)).to.be.eql('0-12, 20+');
-					});
-				});
-				suite('select tab behavior', function() {
-					var element;
-
-					setup(function() {
-						element = fixture('TrivialElement');
-					});
-
-					test('shows filters tab if no filter is selected', function() {
-						expect(element._getSelectedPage(undefined)).to.be.eql(0);
-					});
-					test('shows  values tab if a filter is selected', function() {
-						expect(element._getSelectedPage({ id: 'age' })).to.be.eql(1);
 					});
 				});
 			});

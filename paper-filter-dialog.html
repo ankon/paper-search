@@ -4,6 +4,7 @@
 <link rel="import" href="../iron-flex-layout/iron-flex-layout.html">
 <link rel="import" href="../iron-list/iron-list.html">
 <link rel="import" href="../paper-button/paper-button.html">
+<link rel="import" href="../paper-collapse-item/paper-collapse-item.html">
 <link rel="import" href="../paper-dialog/paper-dialog.html">
 <link rel="import" href="../paper-header-panel/paper-header-panel.html">
 <link rel="import" href="../paper-toolbar/paper-toolbar.html">
@@ -12,8 +13,6 @@
 <link rel="import" href="../paper-item/paper-item-body.html">
 <link rel="import" href="../paper-styles/paper-styles.html">
 <link rel="import" href="../paper-checkbox/paper-checkbox.html">
-<link rel="import" href="../neon-animation/neon-animated-pages.html">
-<link rel="import" href="../neon-animation/neon-animatable.html">
 <link rel="import" href="../neon-animation/animations/fade-in-animation.html">
 <link rel="import" href="../neon-animation/animations/fade-out-animation.html">
 
@@ -37,11 +36,12 @@ Dialog with which the user can filter the result set
 				--paper-toolbar-background: var(--paper-filter-toolbar-background);
 			}
 
-			.dialog,.animated {
+			.dialog,paper-header-panel {
 				@apply(--layout-fit);
+				padding: 0px;
 			}
 
-			.animated {
+			paper-header-panel {
 				margin: 0;
 			}
 
@@ -76,44 +76,21 @@ Dialog with which the user can filter the result set
 		</style>
 
 		<paper-dialog id="dialog" class="dialog" entry-animation="fade-in-animation" exit-animation="fade-out-animation">
-			<array-selector id="selector" items="{{filters}}" selected="{{_selectedFilter}}"></array-selector>
+			<paper-header-panel mode="seamed">
+				<paper-toolbar>
+					<paper-icon-button on-tap="close" icon="close"></paper-icon-button>
+					<span class="title"></span>
+					<paper-button on-tap="_tapReset" class="reset" hidden$="[[!_hasSelectedFilters]]">[[resetButton]]</paper-button>
+					<paper-button on-tap="_tapApply" dialog-confirm>[[saveButton]]</paper-button>
+				</paper-toolbar>
 
-			<neon-animated-pages class="animated" selected="[[_getSelectedPage(_selectedFilter)]]" entry-animation="fade-in-animation" exit-animation="fade-out-animation">
-				<neon-animatable>
-					<paper-header-panel mode="seamed">
-					  	<paper-toolbar>
-							<paper-icon-button on-tap="close" icon="close"></paper-icon-button>
-							<span class="title"></span>
-							<paper-button on-tap="_tapReset" class="reset" hidden$="[[!_hasSelectedFilters(_selectedFilters,_forceRedrawDummy)]]">[[resetButton]]</paper-button>
-							<paper-button on-tap="_tapApply" dialog-confirm>[[saveButton]]</paper-button>
-					    </paper-toolbar>
-
-						<div class="filters">
-							<template is="dom-repeat" items="[[filters]]" as="filter">
-								<paper-item class="filter" on-tap="_tapSelectFilter">
-									<paper-ripple fit></paper-ripple>
-									<paper-item-body two-line class="filter-body">
-										<div class="name">[[filter.name]]</div>
-										<div secondary>[[_getSelectedValuesNames(filter,_selectedFilters,_forceRedrawDummy)]]</div>
-									</paper-item-body>
-								</paper-item>
-							</template>
-						</div>
-					</paper-header-panel>
-				</neon-animatable>
-
-				<neon-animatable>
-			    	<paper-header-panel mode="seamed">
-					    <paper-toolbar>
-					    	<paper-icon-button icon="arrow-back" on-tap="_tapSelectValues"></paper-icon-button>
-						    <span class="title">[[_selectedFilter.name]]</span>
-						</paper-toolbar>
-
-						<iron-list id="valuesList" items="[[_selectedFilter.values]]" as="filterValue">
-							<template>
+				<div class="filters">
+					<template is="dom-repeat" items="[[filters]]" as="filter">
+						<paper-collapse-item class="filter" header="[[filter.name]]">
+							<template is="dom-repeat" items="[[filter.values]]" as="filterValue">
 								<div class="value-holder">
 									<paper-item class="value">
-										<paper-checkbox name="[[filterValue.id]]" checked="{{filterValue.selected}}"></paper-checkbox>
+										<paper-checkbox class="filter-value" data-filter-id$="[[filter.id]]" name="[[filterValue.id]]" checked="[[_isSelectedFilterValue(filter, filterValue, _selectedFilters)]]" on-checked-changed="_updateSelectedFilterValue"></paper-checkbox>
 										<div>
 											[[filterValue.name]]
 											<span class="nrResults" hidden="[[!filterValue.count]]">([[filterValue.count]])</span>
@@ -121,10 +98,10 @@ Dialog with which the user can filter the result set
 									</paper-item>
 								</div>
 							</template>
-						</iron-list>
-					</paper-header-panel>
-				</neon-animatable>
-			</neon-animated-pages>
+						</paper-collapse-item>
+					</template>
+				</div>
+			</paper-header-panel>
 		</paper-dialog>
 	</template>
 </dom-module>
@@ -188,11 +165,16 @@ Dialog with which the user can filter the result set
 				value: {}
 			},
 			_selectedFilter: Object,
-			_forceRedrawDummy: {
-				type: Number,
-				value: 0
+			_hasSelectedFilters: {
+				type: Boolean,
+				readOnly: true,
 			}
 		},
+
+		observers: [
+			'_updateHasSelectedFilters(_selectedFilters)',
+			'_updateHasSelectedFilters(_selectedFilters.*)'
+		],
 
 		// Public methods
 		/**
@@ -203,21 +185,12 @@ Dialog with which the user can filter the result set
 			// XXX - Known issue: this generates addEventListener errors from a11y
 			Polymer.dom(document.body).appendChild(this);
 
+			// Clone selected filters, so it can be changed without touching the external property				
+			this._selectedFilters = Object.assign({}, this.selectedFilters);
+
 			// Wait until dialog is added to the DOM (required for Safari)
 			setTimeout(function() {
 				this.$.dialog.open();
-
-				// Clone selected filters, so it can be changed without touching the external property
-				this._selectedFilters = {};
-				for (var selectedFilterId in this.selectedFilters) {
-					this._selectedFilters[selectedFilterId] = this.selectedFilters[selectedFilterId];
-				}
-
-				// Redraw filters in case they are still here from a formerly filtering attempt that was cancelled
-				this._redrawFilterValues();
-
-				// @see https://github.com/PolymerElements/neon-animation/issues/60#issuecomment-152345020
-				this.$.valuesList.fire('iron-resize');
 			}.bind(this), 1);
 		},
 
@@ -225,84 +198,91 @@ Dialog with which the user can filter the result set
 			this.$.dialog.close();
 		},
 
-		// Actions
-		_tapSelectFilter: function(e) {
-			this.$.selector.select(e.model.filter);
-
-			this._preselectFilterValues();
-		},
-		// Pre-select selected filter values
-		_preselectFilterValues: function() {
-			var selectedValueIds = this._selectedFilters[this._selectedFilter.id];
-			if (typeof selectedValueIds !== 'undefined' && typeof this._selectedFilter.values !== 'undefined') {
-				this.$.valuesList.items.forEach(function(value) {
-					value.selected = selectedValueIds.indexOf(value.id) >= 0;
-				});
-			}
-		},
 		_tapReset: function(e) {
 			this._selectedFilters = {};
-			this._redrawFilterValues();
 		},
 		_tapApply: function(e) {
-			this.selectedFilters = this._selectedFilters;
+			function copyNonEmpty(selectedFilters) {
+				return Object.keys(selectedFilters).reduce(function(result, key) {
+					if (selectedFilters[key].length > 0) {
+						result[key] = selectedFilters[key];
+					}
+					return result;
+				}, {});
+			}
+
+			// Copy the non-empty keys back.
+			this.selectedFilters = copyNonEmpty(this._selectedFilters);
 
 			this.fire('save');
 		},
-		_tapSelectValues: function(e) {
-			// Captured IDs of the selected items
-			const selectedValues = this.$.valuesList.items.filter(function(value) {
-				return value.selected;
-			}).map(function(value) {
-				return value.id;
-			});
-			this._selectedFilters[this._selectedFilter.id] = selectedValues;
 
-			this.$.selector.deselect(this._selectedFilter);
-
-			this._redrawFilterValues();
+		_computeHasSelectedFilters: function(selectedFilters) {
+			return Object.keys(selectedFilters).reduce(function(result, selectedFilterId) {
+				return result || selectedFilters[selectedFilterId].length !== 0;
+			}, false);
 		},
-
-		// Returns if any filters were selected
-		_hasSelectedFilters: function(_selectedFilters, _forceRedrawDummy) {
-			// Iterate until we find a filter that is selected
-			for (selectedFilter in _selectedFilters) {
-				if (_selectedFilters[selectedFilter].length > 0) {
+		_updateHasSelectedFilters: function(ignoredChangeOrObject) {
+			// Ignore the actual change, and recalculate the value.
+			// XXX: Polymer actually calls this sometimes with undefined, so ignore those (documented behavior)
+			if (ignoredChangeOrObject) {
+				this._set_hasSelectedFilters(this._computeHasSelectedFilters(this._selectedFilters));
+			}
+		},
+		_isSelectedFilterValue: function(filter, value, selectedFilters) {
+			return filter.id in selectedFilters && selectedFilters[filter.id].indexOf(value.id) !== -1;
+		},
+		_updateSelectedFilterValue: function(e) {
+			var checkbox = e.target;
+			var filterId = checkbox.getAttribute('data-filter-id');
+			if (!filterId) {
+				// This happens when the dialog is created, somehow polymer calls is BEFORE the attribute itself
+				// is set. Ignore ...
+				return;
+			}
+			var valueId = checkbox.name;
+			
+			// Recreate the filter values. Note that this produces empty arrays when all values get removed.
+			var existingFilterValues = this._selectedFilters[filterId] || [];
+			var acceptedOne = false;
+			var filterValues = existingFilterValues.concat(valueId).filter(function(v) {
+				if (v !== valueId) {
+					// Ok: not looking at this value at all.
 					return true;
 				}
-			}
 
-			return false;
-		},
-		// Returns the concated names of the selected values for a specific filter
-		_getSelectedValuesNames: function(filter, _selectedFilters, _forceRedrawDummy) {
-			var selectedValueIds = _selectedFilters[filter.id];
-			if (typeof filter.values === 'undefined' || typeof selectedValueIds === 'undefined') {
-				return this.noValuesLabel;
-			}
-
-			// Look up names
-			var names = [];
-			filter.values.forEach(function(value) {
-				// Add names of values that are selected
-				if (selectedValueIds.indexOf(value.id) >= 0) {
-					names.push(value.name);
+				if (!acceptedOne && e.target.checked) {
+					// Ok: we're looking at this value, and it should be included. Include one.
+					acceptedOne = true;
+					return true;
 				}
+
+				// Filter out: either the value isn't checked, or we've seen it before.
+				return false;
 			});
 
-			if (names.length === 0) {
+			// Set if this is a new value, notifying all observers.
+			// Note that we ignore changes that merely produced a new array, but kept all values (up to order) identical.
+			if (existingFilterValues != filterValues) {
+				this.set(`_selectedFilters.${filterId}`, filterValues);
+			}
+		},
+		/**
+		 * Create a "friendly" summary of the selected filter values.
+		 */
+		_getSelectedValuesNames: function(filter, selectedFilters) {
+			var selectedValueIds = selectedFilters[filter.id];
+			if (!selectedValueIds || selectedValueIds.length === 0 || filter.values.length === 0) {
 				return this.noValuesLabel;
 			}
 
-			return names.join(', ');
-		},
-		// Forces to redraw filters (required because Polymer doesn't pick up all data changes to arrays)
-		_redrawFilterValues: function() {
-			this._forceRedrawDummy = Math.random();
-		},
-		_getSelectedPage: function(_selectedFilter) {
-			// Show all filters if no filter is selected
-			return !_selectedFilter ? 0 : 1;
+			var names = filter.values.filter(function(value) {
+				return selectedValueIds.indexOf(value.id) !== -1;
+			}).map(function(value) {
+				return value.name;
+			});
+
+			return names.length > 0 ? names.join(', ') : this.noValuesLabel;
 		}
 	});
 
